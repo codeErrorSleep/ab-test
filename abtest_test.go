@@ -11,7 +11,7 @@ func TestCreateABTestList(t *testing.T) {
 	assert := assert.New(t)
 
 	type expectedStruct struct {
-		abTestBucketList []ABTestBucket
+		abTestBucketList ABTestBucketList
 		err              error
 	}
 
@@ -79,6 +79,41 @@ func TestCreateABTestList(t *testing.T) {
 			assert.Equal(ret, test.expected.abTestBucketList)
 		})
 
+	}
+
+}
+
+func TestHashBucket(t *testing.T) {
+
+	assert := assert.New(t)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		err      error
+	}{
+		{
+			name:     "正常初始化",
+			input:    "asdfasdfasdf",
+			expected: "B",
+			err:      nil,
+		},
+	}
+
+	abTestConfig := map[string]float64{
+		"A": 0.3, "B": 0.7,
+	}
+	abTestBucketList, err := CreateABTestList(abTestConfig)
+	if err != nil {
+		assert.Nil(err)
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ret, err := abTestBucketList.HashBucket(test.input)
+			assert.Nil(err)
+			assert.Equal(ret, test.expected)
+		})
 	}
 
 }
