@@ -21,7 +21,7 @@ const (
 // 初始化的配置
 type Conf struct {
 	Name       string
-	Percentage float64
+	Percentage int
 }
 
 type ConfList []Conf
@@ -39,14 +39,22 @@ type ABTestBucket struct {
 
 type ABTestBucketList []ABTestBucket
 
-func CreateABTestList(abTestConfigMap map[string]float64) (abTestBucketList ABTestBucketList, err error) {
-	// 检验百分比是否到100了
+func CreateABTestList(abTestConfigMap map[string]int) (abTestBucketList ABTestBucketList, err error) {
+	if len(abTestConfigMap) == 0 {
+		return nil, errors.New("Input cannot be empty")
+	}
+
+	// Check if the percentages add up to 100
 	sum := 0
 	for _, v := range abTestConfigMap {
-		sum += int(v * 100)
+		if v < 0 {
+			return nil, errors.New("Input percentage cannot be negative")
+		}
+
+		sum += v
 	}
 	if sum != 100 {
-		return nil, errors.New("分配的比例异常")
+		return nil, errors.New("The sum of input percentages must be 100")
 	}
 
 	confList := ConfList{}
@@ -54,13 +62,18 @@ func CreateABTestList(abTestConfigMap map[string]float64) (abTestBucketList ABTe
 	for name, percentage := range abTestConfigMap {
 		confList = append(confList, Conf{Name: name, Percentage: percentage})
 	}
-	// 排序保证每次分配到的都是同一个桶
+	// Sort to ensure the same bucket is allocated each time
 	sort.Sort(confList)
 
-	// 计算每个数据的对应桶的范围
+	// Calculate the range of each data's corresponding bucket
 	start := 1
 	for i := range confList {
-		end := start + int(confList[i].Percentage*Position) - 1
+		// If it's 0, no need to allocate
+		if confList[i].Percentage == 0 {
+			continue
+		}
+
+		end := start + int(confList[i].Percentage*10) - 1
 		abTestBucketList = append(abTestBucketList, ABTestBucket{
 			Name:  confList[i].Name,
 			Start: start,
@@ -72,18 +85,18 @@ func CreateABTestList(abTestConfigMap map[string]float64) (abTestBucketList ABTe
 	return abTestBucketList, nil
 }
 
-// hash 获取
-// hash到对应的饭位置里面,这里直接遍历就OK了
+// Get hash
+// Hash to the corresponding position, here you can directly traverse
 func (abtestBucketList ABTestBucketList) HashBucket(value string) (result string, err error) {
 	if len(abtestBucketList) == 0 {
-		return "", errors.New("未初始化")
+		return "", errors.New("Not initialized")
 	}
 
 	h := fnv.New32a()
 	h.Write([]byte(value))
 	hashValue := h.Sum32()
 
-	// 将哈希值映射到 1 到 maxRange 的范围内
+	// Map the hash value to the range from 1 to maxRange
 	hashPosition := int(hashValue%uint32(Position)) + 1
 
 	for i := range abtestBucketList {
@@ -95,18 +108,22 @@ func (abtestBucketList ABTestBucketList) HashBucket(value string) (result string
 }
 
 func main() {
-
-	abTestConfig := map[string]float64{
-		"A": 0.3, "B": 0.7,
+	// 初始化配置
+	abTestConfig := map[string]int{
+		"A": 30, "B": 70,
 	}
+
+	// 创建ab test
 	abTestBucketList, err := CreateABTestList(abTestConfig)
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(abTestBucketList.HashBucket("iii"))
 
-	h := fnv.New32a()
-	h.Write([]byte("Bbbb"))
-	hashValue := h.Sum32()
-	fmt.Println(hashValue)
+	// 通过这种方式就可以hash了
+	result, err := abTestBucketList.HashBucket("iii")
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(result)
+
 }

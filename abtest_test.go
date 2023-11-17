@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,110 +11,341 @@ import (
 func TestCreateABTestList(t *testing.T) {
 	assert := assert.New(t)
 
-	type expectedStruct struct {
-		abTestBucketList ABTestBucketList
-		err              error
-	}
-
 	tests := []struct {
 		name     string
-		input    map[string]float64
-		expected expectedStruct
+		input    map[string]int
+		expected ABTestBucketList
+		err      error
 	}{
 		{
-			name: "参数不超过100%的",
-			input: map[string]float64{
-				"A": 0.4, "B": 0.3,
+			name: "Normal distribution",
+			input: map[string]int{
+				"A": 30,
+				"B": 70,
 			},
-			expected: expectedStruct{
-				abTestBucketList: nil,
-				err:              errors.New("分配的比例异常"),
-			},
-		},
-		{
-			name: "参数超过100%的",
-			input: map[string]float64{
-				"A": 0.9, "B": 0.3,
-			},
-			expected: expectedStruct{
-				abTestBucketList: nil,
-				err:              errors.New("分配的比例异常"),
-			},
-		},
-		{
-			name: "只有两个的",
-			input: map[string]float64{
-				"A": 0.7, "B": 0.3,
-			},
-			expected: expectedStruct{
-				abTestBucketList: []ABTestBucket{
-					{Name: "A", Start: 1, End: 700},
-					{Name: "B", Start: 701, End: 1000},
+			expected: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   300,
 				},
-				err: nil,
+				{
+					Name:  "B",
+					Start: 301,
+					End:   1000,
+				},
 			},
+			err: nil,
 		},
 		{
-			name: "多个的",
-			input: map[string]float64{
-				"A": 0.2, "B": 0.3, "C": 0.1, "D": 0.4,
+			name: "Distribution ratio exception",
+			input: map[string]int{
+				"A": 30,
+				"B": 80,
 			},
-			expected: expectedStruct{
-				abTestBucketList: []ABTestBucket{
-					{Name: "A", Start: 1, End: 200},
-					{Name: "B", Start: 201, End: 500},
-					{Name: "C", Start: 501, End: 600},
-					{Name: "D", Start: 601, End: 1000},
+			expected: nil,
+			err:      errors.New("The sum of input percentages must be 100"),
+		},
+		{
+			name: "Extreme ratio",
+			input: map[string]int{
+				"A": 1,
+				"B": 99,
+			},
+			expected: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   10,
 				},
-				err: nil,
+				{
+					Name:  "B",
+					Start: 11,
+					End:   1000,
+				},
 			},
+			err: nil,
+		},
+		{
+			name: "Multiple buckets",
+			input: map[string]int{
+				"A": 25,
+				"B": 25,
+				"C": 25,
+				"D": 25,
+			},
+			expected: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   250,
+				},
+				{
+					Name:  "B",
+					Start: 251,
+					End:   500,
+				},
+				{
+					Name:  "C",
+					Start: 501,
+					End:   750,
+				},
+				{
+					Name:  "D",
+					Start: 751,
+					End:   1000,
+				},
+			},
+			err: nil,
+		},
+		{
+			name: "Boundary value",
+			input: map[string]int{
+				"A": 0,
+				"B": 100,
+			},
+			expected: ABTestBucketList{
+				{
+					Name:  "B",
+					Start: 1,
+					End:   1000,
+				},
+			},
+			err: nil,
+		},
+		{
+			name:     "Input is empty",
+			input:    map[string]int{},
+			expected: nil,
+			err:      errors.New("Input cannot be empty"),
+		},
+		{
+			name: "The sum of input percentages is not 100",
+			input: map[string]int{
+				"A": 30,
+				"B": 60,
+			},
+			expected: nil,
+			err:      errors.New("The sum of input percentages must be 100"),
+		},
+		{
+			name: "Input percentage is negative",
+			input: map[string]int{
+				"A": -30,
+				"B": 130,
+			},
+			expected: nil,
+			err:      errors.New("Input percentage cannot be negative"),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ret, err := CreateABTestList(test.input)
-			if test.expected.err != nil {
-				assert.EqualError(err, test.expected.err.Error())
+			if test.err != nil {
+				assert.EqualError(err, test.err.Error())
+			} else {
+				assert.Nil(err)
 			}
-			assert.Equal(ret, test.expected.abTestBucketList)
+			assert.Equal(ret, test.expected)
 		})
-
 	}
-
 }
 
 func TestHashBucket(t *testing.T) {
-
 	assert := assert.New(t)
 
 	tests := []struct {
-		name     string
-		input    string
-		expected string
-		err      error
+		name       string
+		bucketList ABTestBucketList
+		input      string
+		expected   string
+		err        error
 	}{
 		{
-			name:     "正常初始化",
-			input:    "asdfasdfasdf",
+			name: "Normal case",
+			bucketList: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   500,
+				},
+				{
+					Name:  "B",
+					Start: 501,
+					End:   1000,
+				},
+			},
+			input:    "test",
+			expected: "A",
+			err:      nil,
+		},
+		{
+			name:       "Bucket list is empty",
+			bucketList: ABTestBucketList{},
+			input:      "test",
+			expected:   "",
+			err:        errors.New("Not initialized"),
+		},
+		{
+			name: "Normal case",
+			bucketList: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   500,
+				},
+				{
+					Name:  "B",
+					Start: 501,
+					End:   1000,
+				},
+			},
+			input:    "test",
+			expected: "A",
+			err:      nil,
+		},
+		{
+			name:       "Bucket list is empty",
+			bucketList: ABTestBucketList{},
+			input:      "test",
+			expected:   "",
+			err:        errors.New("Not initialized"),
+		},
+		{
+			name: "Single character input string",
+			bucketList: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   500,
+				},
+				{
+					Name:  "B",
+					Start: 501,
+					End:   1000,
+				},
+			},
+			input:    "a",
+			expected: "A",
+			err:      nil,
+		},
+		{
+			name: "Unicode character input string",
+			bucketList: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   500,
+				},
+				{
+					Name:  "B",
+					Start: 501,
+					End:   1000,
+				},
+			},
+			input:    "你好",
 			expected: "B",
+			err:      nil,
+		},
+		{
+			name: "Very long input string",
+			bucketList: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   500,
+				},
+				{
+					Name:  "B",
+					Start: 501,
+					End:   1000,
+				},
+			},
+			input:    strings.Repeat("a", 10000),
+			expected: "A",
+			err:      nil,
+		},
+		{
+			name: "Input string with special characters",
+			bucketList: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   500,
+				},
+				{
+					Name:  "B",
+					Start: 501,
+					End:   1000,
+				},
+			},
+			input:    "!@#$%^&*()",
+			expected: "A",
+			err:      nil,
+		},
+		{
+			name: "Empty input string",
+			bucketList: ABTestBucketList{
+				{
+					Name:  "A",
+					Start: 1,
+					End:   500,
+				},
+				{
+					Name:  "B",
+					Start: 501,
+					End:   1000,
+				},
+			},
+			input:    "",
+			expected: "A",
 			err:      nil,
 		},
 	}
 
-	abTestConfig := map[string]float64{
-		"A": 0.3, "B": 0.7,
-	}
-	abTestBucketList, err := CreateABTestList(abTestConfig)
-	if err != nil {
-		assert.Nil(err)
-	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ret, err := abTestBucketList.HashBucket(test.input)
-			assert.Nil(err)
+			ret, err := test.bucketList.HashBucket(test.input)
+			if test.err != nil {
+				assert.EqualError(err, test.err.Error())
+			} else {
+				assert.Nil(err)
+			}
 			assert.Equal(ret, test.expected)
 		})
 	}
+}
+func BenchmarkCreateABTestList(b *testing.B) {
+	abTestConfigMap := map[string]int{
+		"A": 30,
+		"B": 70,
+	}
 
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = CreateABTestList(abTestConfigMap)
+	}
+}
+
+func BenchmarkHashBucket(b *testing.B) {
+	abTestBucketList := ABTestBucketList{
+		{
+			Name:  "A",
+			Start: 1,
+			End:   300,
+		},
+		{
+			Name:  "B",
+			Start: 301,
+			End:   1000,
+		},
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = abTestBucketList.HashBucket("test")
+	}
 }
