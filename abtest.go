@@ -2,8 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
-	"hash/fnv"
 	"sort"
 )
 
@@ -41,20 +39,20 @@ type ABTestBucketList []ABTestBucket
 
 func CreateABTestList(abTestConfigMap map[string]int) (abTestBucketList ABTestBucketList, err error) {
 	if len(abTestConfigMap) == 0 {
-		return nil, errors.New("Input cannot be empty")
+		return nil, errors.New("input cannot be empty")
 	}
 
 	// Check if the percentages add up to 100
 	sum := 0
 	for _, v := range abTestConfigMap {
 		if v < 0 {
-			return nil, errors.New("Input percentage cannot be negative")
+			return nil, errors.New("input percentage cannot be negative")
 		}
 
 		sum += v
 	}
 	if sum != 100 {
-		return nil, errors.New("The sum of input percentages must be 100")
+		return nil, errors.New("the sum of input percentages must be 100")
 	}
 
 	confList := ConfList{}
@@ -87,14 +85,12 @@ func CreateABTestList(abTestConfigMap map[string]int) (abTestBucketList ABTestBu
 
 // Get hash
 // Hash to the corresponding position, here you can directly traverse
-func (abtestBucketList ABTestBucketList) HashBucket(value string) (result string, err error) {
+func (abtestBucketList ABTestBucketList) HashBucket(value string, hashFunc HashFunc) (result string, err error) {
 	if len(abtestBucketList) == 0 {
-		return "", errors.New("Not initialized")
+		return "", errors.New("not initialized")
 	}
 
-	h := fnv.New32a()
-	h.Write([]byte(value))
-	hashValue := h.Sum32()
+	hashValue := hashFunc(value)
 
 	// Map the hash value to the range from 1 to maxRange
 	hashPosition := int(hashValue%uint32(Position)) + 1
@@ -105,25 +101,4 @@ func (abtestBucketList ABTestBucketList) HashBucket(value string) (result string
 		}
 	}
 	return abtestBucketList[0].Name, nil
-}
-
-func main() {
-	// 初始化配置
-	abTestConfig := map[string]int{
-		"A": 30, "B": 70,
-	}
-
-	// 创建ab test
-	abTestBucketList, err := CreateABTestList(abTestConfig)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	// 通过这种方式就可以hash了
-	result, err := abTestBucketList.HashBucket("iii")
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(result)
-
 }
