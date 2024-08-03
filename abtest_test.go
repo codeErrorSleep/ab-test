@@ -306,7 +306,7 @@ func TestHashBucket(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ret, err := test.bucketList.HashBucket(test.input)
+			ret, err := test.bucketList.HashBucket(test.input, DefaultHashFunc)
 			if test.err != nil {
 				assert.EqualError(err, test.err.Error())
 			} else {
@@ -346,6 +346,6 @@ func BenchmarkHashBucket(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = abTestBucketList.HashBucket("test")
+		_, _ = abTestBucketList.HashBucket("test", DefaultHashFunc)
 	}
 }
