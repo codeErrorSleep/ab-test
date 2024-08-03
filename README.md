@@ -18,7 +18,7 @@ if err != nil {
 }
 
 // 通过这种方式就可以hash了
-fmt.Println(abTestBucketList.HashBucket("iii"))
+fmt.Println(abTestBucketList.HashBucket("iii",DefaultHashFunc))
 
 
 ```
